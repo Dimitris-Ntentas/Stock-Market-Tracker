@@ -35,26 +35,14 @@ type Trade struct {
 	Timestamp time.Time
 }
 
-var symbols = []string{"TSLA", "NVDA", "GOOGL", "EUR/USD"}
+var symbols = []string{"TSLA", "NVDA", "AAPL", "GOOGL", "IC MARKETS:1", "BINANCE:BTCUSDT"}
 var tradeDataMap = make(map[string]*TradeData)
 var wg sync.WaitGroup
 
 func main() {
-	w, _, err := websocket.DefaultDialer.Dial("wss://ws.finnhub.io?token=coudikpr01qhf5nregn0coudikpr01qhf5nregng", nil)
-	if err != nil {
-		panic(err)
-	}
-	defer w.Close()
-
 	// Initialize files and data structures
 	for _, s := range symbols {
 		tradeDataMap[s] = initTradeData(s)
-	}
-
-	// Subscribe to symbols
-	for _, s := range symbols {
-		msg, _ := json.Marshal(map[string]interface{}{"type": "subscribe", "symbol": s})
-		w.WriteMessage(websocket.TextMessage, msg)
 	}
 
 	// Start ticker for calculations
@@ -68,11 +56,35 @@ func main() {
 		}
 	}()
 
-	// Read messages
+	for {
+		err := connectAndSubscribe()
+		if err != nil {
+			log.Println("Error during connection, retrying in 1 second:", err)
+			time.Sleep(1 * time.Second)
+			continue
+		}
+	}
+}
+
+func connectAndSubscribe() error {
+	w, _, err := websocket.DefaultDialer.Dial("wss://ws.finnhub.io?token=coudikpr01qhf5nregn0coudikpr01qhf5nregng", nil)
+	if err != nil {
+		return err
+	}
+	defer w.Close()
+
+	for _, s := range symbols {
+		msg, _ := json.Marshal(map[string]interface{}{"type": "subscribe", "symbol": s})
+		err := w.WriteMessage(websocket.TextMessage, msg)
+		if err != nil {
+			return err
+		}
+	}
+
 	for {
 		_, message, err := w.ReadMessage()
 		if err != nil {
-			log.Fatal("ReadMessage error:", err)
+			return err
 		}
 
 		var tradeMsg TradeMessage
